@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chấm Công Nhận Diện Khuôn Mặt</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f8;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+        }
+        .flash-message {
+            margin: 10px auto;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1rem;
+            max-width: 90%;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: opacity 0.5s ease-in-out;
+        }
+        .flash-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .flash-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .fade-out {
+            opacity: 0;
+        }
+        .video-container {
+            margin: 20px auto;
+            background-color: #000;
+            width: 100%;
+            max-width: 640px;
+            aspect-ratio: 4 / 3;
+            border-radius: 10px;
+            border: 2px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+        .video-frame {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 10px;
+            display: none;
+        }
+        .video-frame.active {
+            display: block;
+        }
+        .placeholder {
+            color: #fff;
+            font-size: 1rem;
+            display: block;
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .loading {
+            color: #fff;
+            font-size: 1rem;
+            display: none;
+            position: absolute;
+        }
+        .countdown {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 1.2rem;
+            display: none;
+        }
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            background-color: #4CAF50;
+            color: white;
+            flex: 1;
+            max-width: 150px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.check-out {
+            background-color: #f44336;
+        }
+        button.check-out:hover {
+            background-color: #da190b;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status-container {
+            margin-bottom: 10px;
+            width: 100%;
+            max-width: 640px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .status-text {
+            display: none;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1rem;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: opacity 0.5s ease-in-out;
+            word-wrap: break-word;
+        }
+        .status-success {
+            background-color: #28a745;
+            display: block;
+        }
+        .status-error {
+            background-color: #dc3545;
+            display: block;
+        }
+        .status-text.fade-out {
+            opacity: 0;
+        }
+        .logout {
+            margin-top: 20px;
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #ccc;
+            color: #333;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        .logout:hover {
+            background-color: #bbb;
+        }
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.5rem;
+            }
+            .video-container {
+                max-width: 100%;
+            }
+            button {
+                padding: 8px 15px;
+                font-size: 0.9rem;
+                max-width: 120px;
+            }
+            .flash-message {
+                font-size: 0.9rem;
+                padding: 10px;
+            }
+            .status-text {
+                font-size: 0.9rem;
+                padding: 10px;
+            }
+            .placeholder, .loading {
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Chấm Công Nhận Diện Khuôn Mặt</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="status-container">
+            <div id="status-text" class="status-text"></div>
+        </div>
+
+        <div class="video-container" id="video-container">
+            <img id="video-feed" class="video-frame" alt="Video Feed">
+            <span id="placeholder" class="placeholder">Camera đang tắt</span>
+            <span id="loading" class="loading">Đang tải camera...</span>
+            <div id="countdown" class="countdown">3</div>
+        </div>
+
+        <div class="buttons">
+            <form action="{{ url_for('checkin') }}" method="post" id="checkin-form">
+                <button type="submit" id="checkin-btn">Ghi Vào</button>
+            </form>
+            <form action="{{ url_for('checkout') }}" method="post" id="checkout-form">
+                <button type="submit" id="checkout-btn" class="check-out">Ghi Ra</button>
+            </form>
+        </div>
+
+        <a href="{{ url_for('logout') }}" class="logout">Đăng xuất</a>
+    </div>
+
+    <script>
+        // Trạng thái để ngăn nhiều yêu cầu
+        let isProcessing = false;
+        let retryCount = 0;
+        const MAX_RETRIES = 3;
+        let countdownTimer = null;
+        let cameraTimeout = null;
+
+        // Hàm kiểm tra quyền webcam
+        async function checkCameraPermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                console.log('Webcam permission granted');
+                stream.getTracks().forEach(track => track.stop());
+                return true;
+            } catch (error) {
+                console.error('Camera permission error:', error);
+                const statusText = document.getElementById('status-text');
+                statusText.textContent = 'Không thể truy cập webcam. Vui lòng cấp quyền hoặc kiểm tra thiết bị.';
+                statusText.className = 'status-text status-error';
+                setTimeout(() => {
+                    statusText.className = 'status-text fade-out';
+                    setTimeout(() => {
+                        statusText.textContent = '';
+                        statusText.className = 'status-text';
+                    }, 500);
+                }, 3000);
+                return false;
+            }
+        }
+
+        // Hàm kiểm tra endpoint video feed
+        async function checkVideoFeedEndpoint(action) {
+            try {
+                const response = await fetch(`/video_feed?action=${action}&nocache=${new Date().getTime()}`, { method: 'HEAD' });
+                if (!response.ok) {
+                    throw new Error(`Video feed endpoint failed: ${response.status}`);
+                }
+                console.log('Video feed endpoint is accessible');
+                return true;
+            } catch (error) {
+                console.error('Video feed endpoint error:', error);
+                const statusText = document.getElementById('status-text');
+                statusText.textContent = 'Không thể kết nối đến luồng video. Camera có thể đang được sử dụng.';
+                statusText.className = 'status-text status-error';
+                return false;
+            }
+        }
+
+        // Hàm xử lý khi video load thành công
+        function handleVideoLoad() {
+            console.log('Video stream loaded successfully');
+            const videoFeed = document.getElementById('video-feed');
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('placeholder').style.display = 'none';
+            videoFeed.classList.add('active');
+
+            // Hiển thị đếm ngược
+            const countdownElement = document.getElementById('countdown');
+            countdownElement.style.display = 'block';
+            let secondsLeft = 3;
+            countdownElement.textContent = secondsLeft;
+
+            if (countdownTimer) clearInterval(countdownTimer);
+            countdownTimer = setInterval(() => {
+                secondsLeft--;
+                countdownElement.textContent = secondsLeft;
+                if (secondsLeft <= 0) {
+                    clearInterval(countdownTimer);
+                    countdownElement.style.display = 'none';
+                }
+            }, 1000);
+
+            const statusText = document.getElementById('status-text');
+            if (statusText.className.includes('status-error')) {
+                statusText.className = 'status-text fade-out';
+                setTimeout(() => {
+                    statusText.textContent = '';
+                    statusText.className = 'status-text';
+                }, 500);
+            }
+
+            retryCount = 0;
+        }
+
+        // Hàm xử lý lỗi video
+        function handleVideoError() {
+            console.error('Video stream failed to load');
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('placeholder').style.display = 'block';
+            document.getElementById('video-feed').classList.remove('active');
+            document.getElementById('countdown').style.display = 'none';
+
+            const statusText = document.getElementById('status-text');
+            statusText.textContent = 'Không thể tải luồng video. Camera có thể đang được sử dụng hoặc không hoạt động.';
+            statusText.className = 'status-text status-error';
+
+            if (retryCount < MAX_RETRIES) {
+                retryCount++;
+                setTimeout(() => {
+                    reloadCamera(isProcessing ? (document.getElementById('checkin-btn').disabled ? 'checkin' : 'checkout') : 'checkin');
+                }, 2000); // Chờ 2 giây trước khi thử lại
+            } else {
+                resetInterface();
+            }
+        }
+
+        // Hàm tải lại camera
+        function reloadCamera(action) {
+            console.log(`Loading camera for action: ${action}, attempt: ${retryCount + 1}`);
+            const videoFeed = document.getElementById('video-feed');
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('placeholder').style.display = 'none';
+            videoFeed.src = `/video_feed?action=${action}&nocache=${new Date().getTime()}`;
+            console.log(`Video feed URL: ${videoFeed.src}`);
+        }
+
+        // Hàm đặt lại giao diện
+        function resetInterface() {
+            const videoFeed = document.getElementById('video-feed');
+            const placeholder = document.getElementById('placeholder');
+            const loading = document.getElementById('loading');
+            const countdown = document.getElementById('countdown');
+            const checkinBtn = document.getElementById('checkin-btn');
+            const checkoutBtn = document.getElementById('checkout-btn');
+
+            if (countdownTimer) clearInterval(countdownTimer);
+            if (cameraTimeout) clearTimeout(cameraTimeout);
+
+            videoFeed.src = '';
+            videoFeed.classList.remove('active');
+            placeholder.style.display = 'block';
+            loading.style.display = 'none';
+            countdown.style.display = 'none';
+            checkinBtn.disabled = false;
+            checkoutBtn.disabled = false;
+            isProcessing = false;
+            retryCount = 0;
+        }
+
+        // Hàm hiển thị trạng thái từ flash message
+        function displayStatusMessage() {
+            const flashMessage = document.querySelector('.flash-message');
+            const statusText = document.getElementById('status-text');
+
+            if (flashMessage) {
+                const messageText = flashMessage.textContent.trim();
+                let displayText = '';
+                let statusClass = '';
+
+                if (flashMessage.classList.contains('flash-success')) {
+                    const nameMatch = messageText.match(/cho (.+)$/);
+                    const name = nameMatch ? nameMatch[1] : 'Unknown';
+                    displayText = `Thành công: ${name}`;
+                    statusClass = 'status-success';
+                } else if (flashMessage.classList.contains('flash-error')) {
+                    if (messageText.includes('Không phát hiện khuôn mặt')) {
+                        displayText = 'Thất bại: Không phát hiện khuôn mặt';
+                    } else if (messageText.includes('Không nhận diện được khuôn mặt')) {
+                        displayText = 'Thất bại: Không nhận diện được khuôn mặt';
+                    } else if (messageText.includes('Điểm danh quá gần')) {
+                        displayText = 'Thất bại: Điểm danh quá gần';
+                    } else if (messageText.includes('Camera đang được sử dụng')) {
+                        displayText = 'Thất bại: Camera đang được sử dụng';
+                    } else {
+                        displayText = `Thất bại: ${messageText.split(': ')[1] || 'Lỗi không xác định'}`;
+                    }
+                    statusClass = 'status-error';
+                }
+
+                statusText.textContent = displayText;
+                statusText.className = `status-text ${statusClass}`;
+                setTimeout(() => {
+                    statusText.className = 'status-text fade-out';
+                    setTimeout(() => {
+                        statusText.textContent = '';
+                        statusText.className = 'status-text';
+                    }, 500);
+                }, 3000);
+
+                flashMessage.style.opacity = '0';
+                setTimeout(() => {
+                    flashMessage.remove();
+                }, 500);
+            }
+        }
+
+        // Xử lý sự kiện submit form
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (isProcessing) {
+                    console.log('Processing in progress, ignoring submit');
+                    const statusText = document.getElementById('status-text');
+                    statusText.textContent = 'Đang xử lý, vui lòng chờ...';
+                    statusText.className = 'status-text status-error';
+                    setTimeout(() => {
+                        statusText.className = 'status-text fade-out';
+                        setTimeout(() => {
+                            statusText.textContent = '';
+                            statusText.className = 'status-text';
+                        }, 500);
+                    }, 2000);
+                    return;
+                }
+                isProcessing = true;
+                retryCount = 0;
+
+                const action = form.action.includes('checkin') ? 'checkin' : 'checkout';
+                const videoFeed = document.getElementById('video-feed');
+                const placeholder = document.getElementById('placeholder');
+                const loading = document.getElementById('loading');
+                const checkinBtn = document.getElementById('checkin-btn');
+                const checkoutBtn = document.getElementById('checkout-btn');
+
+                // Kiểm tra quyền webcam
+                const hasCameraPermission = await checkCameraPermission();
+                if (!hasCameraPermission) {
+                    isProcessing = false;
+                    return;
+                }
+
+                // Kiểm tra endpoint video feed
+                if (!(await checkVideoFeedEndpoint(action))) {
+                    resetInterface();
+                    return;
+                }
+
+                checkinBtn.disabled = true;
+                checkoutBtn.disabled = true;
+                placeholder.style.display = 'none';
+                loading.style.display = 'block';
+
+                if (cameraTimeout) clearTimeout(cameraTimeout);
+                cameraTimeout = setTimeout(() => {
+                    if (loading.style.display === 'block' && retryCount < MAX_RETRIES) {
+                        retryCount++;
+                        const statusText = document.getElementById('status-text');
+                        statusText.textContent = `Đang thử kết nối lại với camera... (${retryCount}/${MAX_RETRIES})`;
+                        statusText.className = 'status-text status-error';
+                        reloadCamera(action);
+                    } else if (retryCount >= MAX_RETRIES) {
+                        statusText.textContent = 'Không thể kết nối với camera sau nhiều lần thử. Vui lòng kiểm tra thiết bị.';
+                        statusText.className = 'status-text status-error';
+                        resetInterface();
+                    }
+                }, 10000); // Timeout 10 giây
+
+                reloadCamera(action);
+
+                videoFeed.onload = () => handleVideoLoad();
+                videoFeed.onerror = () => handleVideoError();
+
+                try {
+                    const CAMERA_DISPLAY_TIME = 5000;
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        signal: controller.signal
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (!response.ok) {
+                        throw new Error(`POST request failed: ${response.status}`);
+                    }
+
+                    if (cameraTimeout) clearTimeout(cameraTimeout);
+
+                    setTimeout(() => {
+                        resetInterface();
+                        displayStatusMessage();
+                    }, CAMERA_DISPLAY_TIME);
+
+                } catch (error) {
+                    if (cameraTimeout) clearTimeout(cameraTimeout);
+
+                    console.error('Error:', error);
+                    const statusText = document.getElementById('status-text');
+
+                    if (error.name === 'AbortError') {
+                        statusText.textContent = 'Yêu cầu quá thời gian. Vui lòng thử lại.';
+                    } else {
+                        statusText.textContent = `Lỗi: ${error.message}`;
+                    }
+
+                    statusText.className = 'status-text status-error';
+                    setTimeout(() => {
+                        statusText.className = 'status-text fade-out';
+                        setTimeout(() => {
+                            statusText.textContent = '';
+                            statusText.className = 'status-text';
+                        }, 500);
+                    }, 3000);
+                    resetInterface();
+                }
+            });
+        });
+
+        // Tự động hiển thị flash message khi tải trang
+        window.addEventListener('load', () => {
+            displayStatusMessage();
+        });
+    </script>
+</body>
+</html>

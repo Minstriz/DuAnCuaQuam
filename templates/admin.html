@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Quản lý nhân viên</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f8;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 1.8rem;
+        }
+        h2 {
+            font-size: 1.5rem;
+        }
+        .form-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 1rem;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: left;
+            font-size: 1rem;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .error {
+            color: red;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .success {
+            color: green;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .logout {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #ccc;
+            color: #333;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 20px auto;
+            display: block;
+            text-align: center;
+            max-width: 200px;
+        }
+        .logout:hover {
+            background-color: #bbb;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .loading.active {
+            display: block;
+        }
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #4CAF50;
+            border-top: 3px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.5rem;
+            }
+            h2 {
+                font-size: 1.2rem;
+            }
+            .form-container {
+                padding: 15px;
+            }
+            input, button {
+                padding: 8px;
+                font-size: 0.9rem;
+            }
+            th, td {
+                padding: 8px;
+                font-size: 0.9rem;
+            }
+            table {
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Quản lý nhân viên</h1>
+        <a href="{{ url_for('logout') }}" class="logout">Đăng xuất</a>
+        <div class="form-container">
+            <h2>Thêm nhân viên mới</h2>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <p class="{{ category }}">{{ message }}</p>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            <form method="POST" enctype="multipart/form-data">
+                <input type="text" name="name" placeholder="Tên nhân viên" required>
+                <input type="file" name="file" accept=".jpg,.jpeg,.png" required>
+                <button type="submit">Upload</button>
+            </form>
+        </div>
+        <h2>Lịch sử chấm công (5 lần gần nhất)</h2>
+        <div class="loading" id="loading"></div>
+        <table id="attendance-table">
+            <thead>
+                <tr>
+                    <th>Thời gian</th>
+                    <th>Tên</th>
+                    <th>Check-in</th>
+                    <th>Check-out</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in data %}
+                <tr>
+                    <td>{{ row['Thời gian'] }}</td>
+                    <td>{{ row['Tên'] }}</td>
+                    <td>{{ row['Check-in'] }}</td>
+                    <td>{{ row['Check-out'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const socket = io('/admin');
+
+        socket.on('connect', () => {
+            console.log('Connected to /admin namespace');
+        });
+
+        socket.on('attendance_update', (data) => {
+            updateTable(data);
+        });
+
+        function updateTable(data) {
+            const tableBody = document.querySelector('#attendance-table tbody');
+            const loading = document.getElementById('loading');
+            loading.classList.add('active');
+
+            tableBody.innerHTML = '';
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row['Thời gian']}</td>
+                    <td>${row['Tên']}</td>
+                    <td>${row['Check-in']}</td>
+                    <td>${row['Check-out']}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            setTimeout(() => {
+                loading.classList.remove('active');
+            }, 500);
+        }
+
+        // Load initial data
+        fetch('/get_attendance')
+            .then(response => response.json())
+            .then(data => updateTable(data))
+            .catch(error => console.error('Error fetching initial attendance:', error));
+    </script>
+</body>
+</html>
